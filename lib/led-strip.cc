@@ -22,32 +22,6 @@
 #include "multi-spi.h"
 #include "led-strip.h"
 
-typedef uint16_t CIEValue;
-
-// Do CIE1931 luminance correction and scale to maximum expected output bits.
-static CIEValue luminance_cie1931_internal(uint8_t c, uint8_t brightness) {
-    const float out_factor = 0xFFFF;
-    const float v = 100.0f * (brightness/255.0f) * (c/255.0f);
-    return out_factor * ((v <= 8) ? v / 902.3 : pow((v + 16) / 116.0, 3));
-}
-
-static CIEValue *CreateCIE1931LookupTable() {
-    CIEValue *result = new CIEValue[256 * 256];
-    for (int v = 0; v < 256; ++v) {      // Value
-        for (int b = 0; b < 256; ++b) {  // Brightness
-            result[b * 256 + v] = luminance_cie1931_internal(v, b);
-        }
-    }
-    return result;
-}
-
-// Return a CIE1931 corrected value from given desired lumninace value and
-// brightness.
-static CIEValue luminance_cie1931(uint8_t value, uint8_t bright) {
-    static const CIEValue *const luminance_lookup = CreateCIE1931LookupTable();
-    return luminance_lookup[bright * 256 + value];
-}
-
 namespace spixels {
 LEDStrip::LEDStrip(int count)
     : count_(count), values_(new RGBc[count]), brightness_(255) {
@@ -58,10 +32,7 @@ LEDStrip::~LEDStrip() { delete values_; }
 void LEDStrip::SetPixel(int pos, const RGBc& c) {
     if (pos < 0 || pos >= count()) return;
     values_[pos] = c;
-    SetLinearValues(pos,
-                    luminance_cie1931(c.r, brightness_),
-                    luminance_cie1931(c.g, brightness_),
-                    luminance_cie1931(c.b, brightness_));
+    SetLinearValues(pos, c.r << 8, c.g << 8, c.b << 8);
 }
 
 void LEDStrip::SetBrightness(uint8_t new_brightness) {
